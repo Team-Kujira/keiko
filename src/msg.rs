@@ -2,16 +2,15 @@ use std::fmt;
 
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Coin, Decimal, Decimal256, Uint128};
-use fuzion_flows::FlowSchedule;
-use kujira::Denom;
+use fuzion_flows::FlowCreate;
+use kujira::{CallbackMsg, Denom};
 use kujira_pilot::{CreateOrca, CreateSale};
-
-use crate::launch::Launch;
 
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: Addr,
     pub token: TokenConfig,
+    pub tokenomics: TokenomicsConfig,
     pub pilot: PilotConfig,
     pub flows: FlowsConfig,
     pub fin: FinConfig,
@@ -19,7 +18,15 @@ pub struct InstantiateMsg {
 }
 
 #[cw_serde]
-pub struct MigrateMsg {}
+pub struct MigrateMsg {
+    pub owner: Addr,
+    pub token: TokenConfig,
+    pub tokenomics: TokenomicsConfig,
+    pub pilot: PilotConfig,
+    pub flows: FlowsConfig,
+    pub fin: FinConfig,
+    pub bow: BowConfig,
+}
 
 #[cw_serde]
 pub enum ExecuteMsg {
@@ -27,18 +34,21 @@ pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<Addr>,
         token: Option<TokenConfig>,
+        tokenomics: Option<TokenomicsConfig>,
         pilot: Option<PilotConfig>,
         flows: Option<FlowsConfig>,
         fin: Box<Option<FinConfig>>,
         bow: Option<BowConfig>,
     },
     /// creates a sale and requires the deposit to be paid
-    Create {},
+    Create {
+        terms_conditions_accepted: bool,
+    },
     /// creates or stores the token information for the launch
     Token {
         idx: Uint128,
         create: bool,
-        symbol: String,
+        symbol: Option<String>,
         denom: Option<Denom>,
         decimals: Option<u8>,
         denom_admin: Option<Addr>,
@@ -69,6 +79,10 @@ pub enum ExecuteMsg {
     PostLaunch {
         idx: Uint128,
     },
+    Update {
+        launch: crate::launch::Launch,
+    },
+    Callback(CallbackMsg),
 }
 
 #[cw_serde]
@@ -76,14 +90,22 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     #[returns(Config)]
     Config {},
-    #[returns(Launch)]
+    #[returns(crate::launch::Launch)]
     Launch { idx: Uint128 },
-    #[returns(Vec<Launch>)]
+    #[returns(crate::launch::Launch)]
+    LaunchByPilotIdx { idx: Uint128 },
+    #[returns(Vec<crate::launch::Launch>)]
     Launches {
         start_after: Option<Uint128>,
         limit: Option<u8>,
     },
-    #[returns(Vec<Launch>)]
+    #[returns(Vec<crate::launch::Launch>)]
+    LaunchesByOwner {
+        owner: Addr,
+        start_after: Option<Uint128>,
+        limit: Option<u8>,
+    },
+    #[returns(Vec<crate::launch::Launch>)]
     LaunchesByStatus {
         status: LaunchStatus,
         start_after: Option<Uint128>,
@@ -118,7 +140,7 @@ pub struct TokenomicsCategories {
 pub struct TokenomicsRecipient {
     pub amount: Uint128,
     pub address: Option<Addr>,
-    pub schedules: Option<Vec<FlowSchedule>>,
+    pub flows: Option<Vec<FlowCreate>>,
 }
 
 #[cw_serde]
@@ -147,9 +169,22 @@ pub struct Bow {
 }
 
 #[cw_serde]
+pub enum CallbackType {
+    BowCallback { idx: Uint128 },
+}
+
+#[cw_serde]
 pub struct TokenConfig {
     pub denom_fee: Coin,
     pub default_admin: Addr,
+    pub utilities_contract: Addr,
+}
+
+#[cw_serde]
+pub struct TokenomicsConfig {
+    pub minimum_liquidity_one_side: Decimal,
+    pub default_lp_vest_cliff: u64,
+    pub default_lp_vest_duration: u64,
 }
 
 #[cw_serde]
@@ -167,10 +202,16 @@ impl fmt::Display for LaunchStatus {
 }
 
 #[cw_serde]
+pub struct BidDenoms {
+    pub denom: Denom,
+    pub symbol: String,
+    pub decimals: u8,
+}
+
+#[cw_serde]
 pub struct PilotConfig {
-    pub deposit: Coin,
     pub pilot_contract: Addr,
-    pub allowed_bid_denoms: Vec<Denom>,
+    pub allowed_bid_denoms: Vec<BidDenoms>,
     pub min_raise_amount: Uint128,
 }
 
@@ -202,6 +243,7 @@ pub struct BowConfig {
 pub struct Config {
     pub owner: Addr,
     pub token: TokenConfig,
+    pub tokenomics: TokenomicsConfig,
     pub pilot: PilotConfig,
     pub flows: FlowsConfig,
     pub fin: FinConfig,

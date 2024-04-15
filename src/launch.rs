@@ -12,6 +12,7 @@ pub struct Launch {
     pub idx: Uint128,
     pub owner: Addr,
     pub deposit: Coin,
+    pub terms_conditions_accepted: Option<bool>,
     pub status: LaunchStatus,
     pub token: Option<Token>,
     pub tokenomics: Option<Tokenomics>,
@@ -24,15 +25,21 @@ impl Launch {
     fn next_idx(storage: &dyn Storage) -> Uint128 {
         match launch().keys(storage, None, None, Order::Descending).next() {
             Some(Ok(x)) => Uint128::from(x + 1),
-            _ => Uint128::default(),
+            _ => Uint128::zero(),
         }
     }
 
-    pub fn new(storage: &dyn Storage, owner: Addr, deposit: Coin) -> Self {
+    pub fn new(
+        storage: &dyn Storage,
+        owner: Addr,
+        deposit: Coin,
+        terms_conditions_accepted: bool,
+    ) -> Self {
         Self {
             idx: Self::next_idx(storage),
             owner,
             deposit,
+            terms_conditions_accepted: Some(terms_conditions_accepted),
             status: LaunchStatus::Created,
             token: None,
             tokenomics: None,

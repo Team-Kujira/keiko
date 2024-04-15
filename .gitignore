@@ -15,3 +15,6 @@
 # IDEs
 *.iml
 .idea
+
+pilot*
+orca-queue*

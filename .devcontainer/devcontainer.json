@@ -46,6 +46,13 @@
 				"GitHub.codespaces"
 			]
 		},
+		"codespaces": {
+			"repositories": {
+				"team-kujira/pilot": {
+					"permissions": "read-all"
+				}
+			}
+		}
 	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],

@@ -2,9 +2,12 @@
 //! creation of DeFi instruments as required by the launcher
 pub mod contract;
 pub mod error;
-pub mod msg;
 pub mod launch;
+pub mod msg;
 pub mod state;
+
+#[cfg(test)]
+mod tests;
 
 pub use crate::error::ContractError;
 pub use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
