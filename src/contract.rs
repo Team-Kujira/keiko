@@ -31,17 +31,6 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn migrate(deps: DepsMut<KujiraQuery>, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    let config = Config {
-        owner: msg.owner,
-        token: msg.token,
-        tokenomics: msg.tokenomics,
-        pilot: msg.pilot,
-        flows: msg.flows,
-        fin: msg.fin,
-        bow: msg.bow,
-    };
-    CONFIG.save(deps.storage, &config)?;
-
     Ok(Response::default())
 }
 
@@ -694,11 +683,9 @@ pub fn execute(
                                     },
                                 )));
                             };
-                            for mut flow in flows {
+                            for flow in flows {
                                 let mut flows_amount = 0u128;
-                                flow.genesis_time = env.block.time.seconds();
-                                for mut schedule in flow.clone().schedules {
-                                    schedule.start_time = env.block.time.seconds();
+                                for schedule in flow.clone().schedules {
                                     flows_amount = flows_amount.add(schedule.amount.u128());
                                 }
                                 messages.push(CosmosMsg::Wasm(wasm_execute(
@@ -990,8 +977,88 @@ pub fn execute(
                         &fuzion_flows::ExecuteMsg::CreateFlows {
                             flow_list: vec![lp_flow],
                         },
-                        info.funds,
+                        info.funds.clone(),
                     )?));
+
+                    // Register the LP token in Fuzion Products
+                    let bid_denom = launch.clone().pilot.unwrap().orca.bid_denom;
+                    let bid_denom_config = config
+                        .pilot
+                        .allowed_bid_denoms
+                        .iter()
+                        .find(|d| d.denom == bid_denom)
+                        .unwrap();
+                    let managed_token = launch.clone().token.unwrap();
+                    let logo_uris: Option<LogoURIs> = Some(LogoURIs {
+                        png: managed_token.png_url,
+                        svg: managed_token.svg_url,
+                    });
+                    let lp_symbol = format!(
+                        "LP {}-{}",
+                        managed_token.symbol.to_uppercase(),
+                        bid_denom_config.symbol.to_uppercase()
+                    );
+                    let lp_display = format!(
+                        "{}-{}-ulp",
+                        managed_token.symbol.to_lowercase(),
+                        bid_denom_config.symbol.to_lowercase()
+                    );
+                    let asset = AssetList {
+                        chain_name: "kujira".to_string(),
+                        assets: vec![Asset {
+                            description: Some(
+                                format!(
+                                    "The LP token for the {}-{} pair",
+                                    managed_token.symbol.to_uppercase(),
+                                    bid_denom_config.symbol.to_uppercase()
+                                )
+                                .to_string(),
+                            ),
+                            denom_units: vec![
+                                DenomUnit {
+                                    denom: info.funds[0].denom.to_string(),
+                                    exponent: 0,
+                                },
+                                DenomUnit {
+                                    denom: lp_display.clone(),
+                                    exponent: 6,
+                                },
+                            ],
+                            base: info.funds[0].denom.to_string(),
+                            name: lp_symbol.clone(),
+                            display: lp_display,
+                            symbol: lp_symbol,
+                            coingecko_id: None,
+                            logo_uris,
+                        }],
+                    };
+
+                    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                        contract_addr: config.token.utilities_contract.to_string(),
+                        msg: to_json_binary(&fuzion_utilities::ExecuteMsg::UploadAsset { asset })?,
+                        funds: vec![],
+                    }));
+
+                    let coin = Coin {
+                        denom: info.funds[0].denom.to_string(),
+                        amount: Uint128::from(0_u128),
+                    };
+
+                    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                        contract_addr: config.token.utilities_contract.to_string(),
+                        msg: to_json_binary(&fuzion_utilities::ExecuteMsg::UploadTotalSupply {
+                            total_supply_list: vec![coin.clone()],
+                        })?,
+                        funds: vec![],
+                    }));
+
+                    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                        contract_addr: config.token.utilities_contract.to_string(),
+                        msg: to_json_binary(&fuzion_utilities::ExecuteMsg::UploadCuratedDenoms {
+                            curated_denom_list: vec![coin],
+                        })?,
+                        funds: vec![],
+                    }));
                 }
             }
 
