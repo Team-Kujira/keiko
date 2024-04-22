@@ -21,8 +21,10 @@ cw20 = "1.1.2"
 cw-utils = "1.0.3"
 fuzion-flows = "0.8.1"
 fuzion-utilities = "0.8.3"
-kujira = "0.8.3"
-kujira-pilot = "0.8.6"
+kujira = "1.0.2"
+kujira-std = "1.0.1"
+kujira-fin = "1.0.0"
+kujira-pilot = "1.0.1"
 schemars = "0.8.16"
 serde = { version = "1.0.196", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.57" }
@@ -30,12 +32,12 @@ thiserror = { version = "1.0.57" }
 [dev-dependencies]
 cw-multi-test = "0.18.1"
 kujira-orca-queue = { path = "./orca-queue/contracts/queue", package = "orca-queue" }
-kujira-std = "0.8.6"
-kujira-fin = "0.8.3"
-kujira-bow = "0.8.3"
+kujira-std = "1.0.1"
+kujira-fin = "1.0.0"
+kujira-bow = "1.0.0"
 kujira-rs-testing = "1.4.1"
 kujira-pilot-testing = { path = "./pilot", package = "fuzion-kujira-pilot" }
-kujira-orca = "0.8.3"
+kujira-orca = "1.0.0"
 
 [profile.release]
 opt-level = 3
