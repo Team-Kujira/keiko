@@ -28,8 +28,19 @@ const CONTRACT_NAME: &str = "fuzion-kujira-keiko";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[entry_point]
-pub fn migrate(deps: DepsMut<KujiraQuery>, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut<KujiraQuery>, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    let config = Config {
+        owner: msg.owner,
+        token: msg.token,
+        tokenomics: msg.tokenomics,
+        pilot: msg.pilot,
+        flows: msg.flows,
+        fin: msg.fin,
+        bow: msg.bow,
+    };
+    CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default())
 }
@@ -430,7 +441,8 @@ pub fn execute(
                     && launch.pilot.clone().is_some()
                     && launch.status == LaunchStatus::Planned
                     && launch.pilot.clone().unwrap().idx.is_none()
-                    && launch.pilot.clone().unwrap().sale.opens <= env.block.time,
+                    && launch.pilot.clone().unwrap().sale.opens.seconds()
+                        <= env.block.time.seconds(),
                 ContractError::Unauthorized {}
             );
 
@@ -744,7 +756,7 @@ pub fn execute(
             let fin = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
                 admin: Some(env.contract.address.to_string()),
                 code_id: config.fin.code_id,
-                msg: to_json_binary(&kujira::fin::InstantiateMsg {
+                msg: to_json_binary(&kujira_fin::InstantiateMsg {
                     owner: env.contract.address.clone(),
                     denoms: [
                         cw20::Denom::Native(denom.to_string()),
@@ -756,6 +768,7 @@ pub fn execute(
                     price_precision: Precision::DecimalPlaces(price_precision_decimals as u8),
                     fee_maker: config.fin.fee_maker,
                     fee_taker: config.fin.fee_taker,
+                    fee_address: config.fin.fee_address,
                 })?,
                 funds: vec![],
                 label: format!("FIN {}-{}", denom_symbol, bid_denom_config.symbol),

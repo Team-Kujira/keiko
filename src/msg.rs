@@ -227,6 +227,7 @@ pub struct FinConfig {
     pub admin: Addr,
     pub fee_maker: Decimal256,
     pub fee_taker: Decimal256,
+    pub fee_address: Addr,
 }
 
 #[cw_serde]
