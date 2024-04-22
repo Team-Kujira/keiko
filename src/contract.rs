@@ -955,6 +955,28 @@ pub fn execute(
             launch.save(deps.storage)?;
             Ok(Response::default().add_attribute("action", "update"))
         }
+        ExecuteMsg::UpdateDescription { idx, description } => {
+            let mut launch = Launch::load(deps.storage, idx)?;
+            ensure!(
+                (info.sender == config.owner || info.sender == launch.owner)
+                    && launch.status == LaunchStatus::InProgress,
+                ContractError::Unauthorized {}
+            );
+            let mut pilot = launch.clone().pilot.unwrap();
+            pilot.sale.description = description.clone();
+            launch.pilot = Some(pilot.clone());
+            launch.save(deps.storage)?;
+            Ok(Response::default()
+                .add_attribute("action", "update")
+                .add_message(CosmosMsg::Wasm(wasm_execute(
+                    config.pilot.pilot_contract.clone(),
+                    &kujira_pilot::ExecuteMsg::UpdateSaleDescription {
+                        idx: pilot.idx.unwrap(),
+                        description,
+                    },
+                    vec![],
+                )?)))
+        }
         ExecuteMsg::Callback(msg) => {
             // Executes the callback from the BOW Market Maker
             // Sends the LP tokens to the beneficiary

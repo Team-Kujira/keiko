@@ -82,6 +82,10 @@ pub enum ExecuteMsg {
     Update {
         launch: crate::launch::Launch,
     },
+    UpdateDescription {
+        idx: Uint128,
+        description: String,
+    },
     Callback(CallbackMsg),
 }
 
