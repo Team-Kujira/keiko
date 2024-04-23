@@ -153,6 +153,8 @@ fn launch_new_token() {
             Addr::unchecked("sender"),
             &kujira_pilot::InstantiateMsg {
                 owner: Addr::unchecked("owner"),
+                orca_admin: Some(Addr::unchecked("orca_admin")),
+                orca_owner: Some(Addr::unchecked("orca_owner")),
                 deposit: Coin {
                     denom: "usk".to_string(),
                     amount: Uint128::from(1_000_000_000u128),
@@ -160,6 +162,7 @@ fn launch_new_token() {
                 orca_code_id,
                 sale_fee: Decimal::from_str("0.05").unwrap(),
                 withdrawal_fee: Decimal::from_str("0.005").unwrap(),
+                fee_address: Addr::unchecked("fee_address"),
             },
             &[],
             "KEIKO",
@@ -204,6 +207,7 @@ fn launch_new_token() {
                     admin: Addr::unchecked("admin"),
                     fee_maker: Decimal256::from_str("0.00075").unwrap(),
                     fee_taker: Decimal256::from_str("0.0015").unwrap(),
+                    fee_address: Addr::unchecked("fee_address"),
                 },
                 bow: BowConfig {
                     code_id: bow_code_id,
@@ -704,6 +708,8 @@ fn launch_own_token() {
             Addr::unchecked("sender"),
             &kujira_pilot::InstantiateMsg {
                 owner: Addr::unchecked("owner"),
+                orca_admin: Some(Addr::unchecked("orca_admin")),
+                orca_owner: Some(Addr::unchecked("orca_owner")),
                 deposit: Coin {
                     denom: "usk".to_string(),
                     amount: Uint128::from(1_000_000_000u128),
@@ -711,6 +717,7 @@ fn launch_own_token() {
                 orca_code_id,
                 sale_fee: Decimal::from_str("0.05").unwrap(),
                 withdrawal_fee: Decimal::from_str("0.005").unwrap(),
+                fee_address: Addr::unchecked("fee_address"),
             },
             &[],
             "KEIKO",
@@ -755,6 +762,7 @@ fn launch_own_token() {
                     admin: Addr::unchecked("admin"),
                     fee_maker: Decimal256::from_str("0.00075").unwrap(),
                     fee_taker: Decimal256::from_str("0.0015").unwrap(),
+                    fee_address: Addr::unchecked("fee_address"),
                 },
                 bow: BowConfig {
                     code_id: bow_code_id,

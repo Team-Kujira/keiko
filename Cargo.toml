@@ -31,12 +31,12 @@ thiserror = { version = "1.0.57" }
 
 [dev-dependencies]
 cw-multi-test = "0.18.1"
-# kujira-orca-queue = { path = "./orca-queue/contracts/queue", package = "orca-queue" }
+kujira-orca-queue = { path = "./orca-queue/contracts/queue", package = "orca-queue" }
 kujira-std = "1.0.1"
 kujira-fin = "1.0.0"
 kujira-bow = "1.0.0"
-kujira-rs-testing = "1.4.1"
-# kujira-pilot-testing = { path = "./pilot", package = "fuzion-kujira-pilot" }
+kujira-rs-testing = "1.6.0"
+kujira-pilot-testing = { path = "./pilot", package = "fuzion-kujira-pilot" }
 kujira-orca = "1.0.0"
 
 [profile.release]
