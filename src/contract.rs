@@ -28,19 +28,8 @@ const CONTRACT_NAME: &str = "fuzion-kujira-keiko";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[entry_point]
-pub fn migrate(deps: DepsMut<KujiraQuery>, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut<KujiraQuery>, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-
-    let config = Config {
-        owner: msg.owner,
-        token: msg.token,
-        tokenomics: msg.tokenomics,
-        pilot: msg.pilot,
-        flows: msg.flows,
-        fin: msg.fin,
-        bow: msg.bow,
-    };
-    CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default())
 }

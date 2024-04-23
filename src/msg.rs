@@ -18,15 +18,7 @@ pub struct InstantiateMsg {
 }
 
 #[cw_serde]
-pub struct MigrateMsg {
-    pub owner: Addr,
-    pub token: TokenConfig,
-    pub tokenomics: TokenomicsConfig,
-    pub pilot: PilotConfig,
-    pub flows: FlowsConfig,
-    pub fin: FinConfig,
-    pub bow: BowConfig,
-}
+pub struct MigrateMsg {}
 
 #[cw_serde]
 pub enum ExecuteMsg {
