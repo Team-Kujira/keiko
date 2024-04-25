@@ -71,6 +71,13 @@ pub enum ExecuteMsg {
     PostLaunch {
         idx: Uint128,
     },
+    FinLaunch {
+        addr: Addr,
+    },
+    FinSetOwner {
+        addr: Addr,
+        owner: Addr,
+    },
     Update {
         launch: crate::launch::Launch,
     },
