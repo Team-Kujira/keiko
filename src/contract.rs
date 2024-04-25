@@ -743,10 +743,10 @@ pub fn execute(
             };
 
             let fin = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
-                admin: Some(env.contract.address.to_string()),
+                admin: Some(config.fin.admin.clone().to_string()),
                 code_id: config.fin.code_id,
                 msg: to_json_binary(&kujira_fin::InstantiateMsg {
-                    owner: env.contract.address.clone(),
+                    owner: config.fin.owner.clone(),
                     denoms: [
                         cw20::Denom::Native(denom.to_string()),
                         cw20::Denom::Native(bid_denom.to_string()),
@@ -776,10 +776,10 @@ pub fn execute(
                 .addr_humanize(&instantiate2_address(&checksum, &creator, &bow_salt).unwrap())?;
 
             let bow = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
-                admin: Some(env.contract.address.to_string()),
+                admin: Some(config.bow.admin.clone().to_string()),
                 code_id: config.bow.code_id,
                 msg: to_json_binary(&kujira::bow::market_maker::InstantiateMsg {
-                    owner: env.contract.address.clone(),
+                    owner: config.bow.owner.clone(),
                     fin_contract: fin_address.clone(),
                     intervals: config.bow.intervals,
                     fee: config.bow.fee,
