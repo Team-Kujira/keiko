@@ -951,38 +951,6 @@ pub fn execute(
                 .add_attribute("idx", idx)
                 .add_messages(messages))
         }
-        ExecuteMsg::FinLaunch { addr } => {
-            ensure!(info.sender == config.owner, ContractError::Unauthorized {});
-
-            Ok(
-                Response::default().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: addr.to_string(),
-                    msg: to_json_binary(&kujira_fin::ExecuteMsg::Launch {})?,
-                    funds: vec![],
-                })),
-            )
-        }
-
-        ExecuteMsg::FinSetOwner { addr, owner } => {
-            ensure!(info.sender == config.owner, ContractError::Unauthorized {});
-
-            Ok(Response::default()
-                .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: addr.to_string(),
-                    msg: to_json_binary(&kujira_fin::ExecuteMsg::UpdateConfig {
-                        owner: Some(owner.clone()),
-                        price_precision: None,
-                        fee_taker: None,
-                        fee_maker: None,
-                    })?,
-                    funds: vec![],
-                }))
-                .add_message(CosmosMsg::Wasm(WasmMsg::UpdateAdmin {
-                    contract_addr: addr.to_string(),
-                    admin: owner.to_string(),
-                })))
-        }
-
         ExecuteMsg::Update { launch } => {
             ensure!(info.sender == config.owner, ContractError::Unauthorized {});
             let _ = Launch::load(deps.storage, launch.clone().idx)?;
