@@ -254,6 +254,11 @@ pub fn execute(
             let mut launch = Launch::load(deps.storage, idx)?;
             launch.is_owner(&info.sender)?;
 
+            let pilot_config: kujira_pilot::ConfigResponse = deps.querier.query_wasm_smart(
+                config.pilot.pilot_contract.clone(),
+                &kujira_pilot::QueryMsg::Config {},
+            )?;
+
             ensure!(
                 launch.token.is_some() && launch.pilot.is_none(),
                 ContractError::Unauthorized {}
@@ -289,11 +294,18 @@ pub fn execute(
                 ContractError::OneSaleCategoryRecipient {}
             );
 
+            let max_liquidity = Decimal::from_atomics(
+                sale_category.clone().next().unwrap().recipients[0].amount,
+                0,
+            )
+            .unwrap()
+            .mul(Decimal::one() - pilot_config.sale_fee);
+
             ensure!(
                 liquidity_category.clone().next().unwrap().recipients[0]
                     .amount
-                    .lt(&sale_category.clone().next().unwrap().recipients[0].amount),
-                ContractError::LiquidityAmountSaleAmount {}
+                    .le(&max_liquidity.to_uint_floor()),
+                ContractError::LiquidityAmountSaleAmount(max_liquidity.to_string())
             );
 
             ensure!(
@@ -724,18 +736,22 @@ pub fn execute(
                 .api
                 .addr_humanize(&instantiate2_address(&checksum, &creator, &fin_salt).unwrap())?;
 
-            let min_price_of_launch = launch.clone().pilot.unwrap().sale.price.mul(
-                Decimal::from_str(&launch.clone().pilot.unwrap().orca.max_slot.to_string())
-                    .unwrap()
-                    .mul(launch.clone().pilot.unwrap().orca.premium_rate_per_slot),
-            );
+            // get the Sale Tokenomics category
+            let sale_category = tokenomics
+                .categories
+                .iter()
+                .find(|c| c.category_type == CategoryTypes::Sale)
+                .unwrap();
 
-            let price_precision_decimals = if min_price_of_launch.lt(&Decimal::one()) {
-                let num_str = min_price_of_launch.to_string();
+            let average_price_of_launch =
+                Decimal::from_ratio(raise_amount, sale_category.recipients[0].amount);
+
+            let price_precision_decimals = if average_price_of_launch.lt(&Decimal::one()) {
+                let num_str = average_price_of_launch.to_string();
                 let parts: Vec<&str> = num_str.split('.').collect();
-                parts[1].chars().filter(|&c| c == '0').count() + 4
-            } else if min_price_of_launch.ge(&Decimal::one())
-                && min_price_of_launch.lt(&Decimal::from_str("1000.0")?)
+                parts[1].chars().take_while(|&c| c == '0').count() + 4
+            } else if average_price_of_launch.ge(&Decimal::one())
+                && average_price_of_launch.lt(&Decimal::from_str("1000.0")?)
             {
                 3
             } else {
@@ -746,7 +762,7 @@ pub fn execute(
                 admin: Some(config.fin.admin.clone().to_string()),
                 code_id: config.fin.code_id,
                 msg: to_json_binary(&kujira_fin::InstantiateMsg {
-                    owner: config.fin.owner.clone(),
+                    owner: env.contract.address.clone(),
                     denoms: [
                         cw20::Denom::Native(denom.to_string()),
                         cw20::Denom::Native(bid_denom.to_string()),
@@ -800,13 +816,6 @@ pub fn execute(
                 .find(|c| c.category_type == CategoryTypes::Liquidity)
                 .unwrap();
 
-            // get the Sale Tokenomics category
-            let sale_category = tokenomics
-                .categories
-                .iter()
-                .find(|c| c.category_type == CategoryTypes::Sale)
-                .unwrap();
-
             // calculate the LP to provide to the pool
             if launch.clone().token.unwrap().is_managed {
                 messages.push(CosmosMsg::Custom(KujiraMsg::Denom(DenomMsg::Mint {
@@ -817,11 +826,11 @@ pub fn execute(
             };
             let lp_denom_funds = coin(lp_category.recipients[0].amount.u128(), denom.to_string());
 
-            let stable_amount = raise_total.multiply_ratio(
+            let lp_stable_amount = raise_total.multiply_ratio(
                 lp_category.recipients[0].amount.u128(),
                 sale_category.recipients[0].amount.u128(),
             );
-            let lp_stable_funds = coin(stable_amount.u128(), bid_denom.to_string());
+            let lp_stable_funds = coin(lp_stable_amount.u128(), bid_denom.to_string());
 
             let mut lp_funds = NativeBalance(vec![lp_denom_funds.clone(), lp_stable_funds]);
             lp_funds.normalize();
@@ -907,20 +916,24 @@ pub fn execute(
                 }));
             }
 
-            messages.push(CosmosMsg::Bank(BankMsg::Send {
-                to_address: launch.owner.to_string(),
-                amount: vec![pilot_config.deposit],
-            }));
+            if !pilot_config.deposit.amount.is_zero() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: launch.owner.to_string(),
+                    amount: vec![pilot_config.deposit],
+                }));
+            }
 
             let beneficiary_funds = coin(
-                raise_amount.u128().sub(stable_amount.u128()),
+                raise_amount.u128().sub(lp_stable_amount.u128()),
                 bid_denom.to_string(),
             );
 
-            messages.push(CosmosMsg::Bank(BankMsg::Send {
-                to_address: launch.clone().pilot.unwrap().beneficiary.to_string(),
-                amount: vec![beneficiary_funds],
-            }));
+            if !beneficiary_funds.amount.is_zero() {
+                messages.push(CosmosMsg::Bank(BankMsg::Send {
+                    to_address: launch.clone().pilot.unwrap().beneficiary.to_string(),
+                    amount: vec![beneficiary_funds],
+                }));
+            }
 
             launch.fin = Some(Fin {
                 contract_address: Some(fin_address),
@@ -943,6 +956,120 @@ pub fn execute(
             let _ = Launch::load(deps.storage, launch.clone().idx)?;
             launch.save(deps.storage)?;
             Ok(Response::default().add_attribute("action", "update"))
+        }
+        ExecuteMsg::LaunchFin { idx } => {
+            let launch = Launch::load(deps.storage, idx)?;
+            ensure!(
+                info.sender == config.owner
+                    || info.sender == config.fin.owner
+                    || info.sender == launch.owner,
+                ContractError::Unauthorized {}
+            );
+
+            ensure!(
+                (launch.status == LaunchStatus::Completed
+                    && launch.fin.is_some()
+                    && launch.bow.is_some()),
+                ContractError::Unauthorized {}
+            );
+
+            let mut messages = vec![CosmosMsg::Wasm(wasm_execute(
+                launch.clone().fin.unwrap().contract_address.unwrap(),
+                &kujira_fin::ExecuteMsg::Launch {},
+                vec![],
+            )?)];
+
+            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: launch.fin.unwrap().contract_address.unwrap().to_string(),
+                msg: to_json_binary(&kujira_fin::ExecuteMsg::UpdateConfig {
+                    owner: Some(config.fin.owner.clone()),
+                    price_precision: None,
+                    fee_taker: None,
+                    fee_maker: None,
+                })?,
+                funds: vec![],
+            }));
+
+            Ok(Response::default()
+                .add_attribute("action", "LaunchFin")
+                .add_messages(messages))
+        }
+        ExecuteMsg::UpdateFinAdminOwner { idx } => {
+            ensure!(
+                info.sender == config.owner || info.sender == config.fin.owner,
+                ContractError::Unauthorized {}
+            );
+            let launch = Launch::load(deps.storage, idx)?;
+            ensure!(
+                (launch.status == LaunchStatus::Completed
+                    && launch.fin.is_some()
+                    && launch.bow.is_some()),
+                ContractError::Unauthorized {}
+            );
+            let mut messages = vec![CosmosMsg::Wasm(WasmMsg::UpdateAdmin {
+                contract_addr: launch
+                    .clone()
+                    .fin
+                    .unwrap()
+                    .contract_address
+                    .unwrap()
+                    .to_string(),
+                admin: config.fin.admin.to_string(),
+            })];
+
+            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: launch.fin.unwrap().contract_address.unwrap().to_string(),
+                msg: to_json_binary(&kujira_fin::ExecuteMsg::UpdateConfig {
+                    owner: Some(config.fin.owner.clone()),
+                    price_precision: None,
+                    fee_taker: None,
+                    fee_maker: None,
+                })?,
+                funds: vec![],
+            }));
+
+            Ok(Response::default()
+                .add_attribute("action", "UpdateFinAdminOwner")
+                .add_messages(messages))
+        }
+        ExecuteMsg::UpdateBowAdminOwner { idx } => {
+            ensure!(
+                info.sender == config.owner || info.sender == config.bow.owner,
+                ContractError::Unauthorized {}
+            );
+            let launch = Launch::load(deps.storage, idx)?;
+            ensure!(
+                (launch.status == LaunchStatus::Completed
+                    && launch.fin.is_some()
+                    && launch.bow.is_some()),
+                ContractError::Unauthorized {}
+            );
+
+            let mut messages = vec![CosmosMsg::Wasm(WasmMsg::UpdateAdmin {
+                contract_addr: launch
+                    .bow
+                    .clone()
+                    .unwrap()
+                    .contract_address
+                    .unwrap()
+                    .to_string(),
+                admin: config.bow.admin.to_string(),
+            })];
+
+            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: launch.bow.unwrap().contract_address.unwrap().to_string(),
+                msg: to_json_binary(&kujira_fin::ExecuteMsg::UpdateConfig {
+                    owner: Some(config.bow.owner.clone()),
+                    price_precision: None,
+                    fee_taker: None,
+                    fee_maker: None,
+                })?,
+                funds: vec![],
+            }));
+
+            Ok(Response::default()
+                .add_attribute("action", "UpdateBowAdminOwner")
+                .add_messages(messages))
         }
         ExecuteMsg::UpdateDescription { idx, description } => {
             let mut launch = Launch::load(deps.storage, idx)?;
