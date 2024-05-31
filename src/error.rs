@@ -76,8 +76,8 @@ pub enum ContractError {
     #[error("Tokenomics requires one liquidity category recipient")]
     OneLiquidityCategoryRecipient {},
 
-    #[error("Liquidity Amount can not be greater than Sale Amount")]
-    LiquidityAmountSaleAmount {},
+    #[error("Liquidity Amount can not be greater than {0}")]
+    LiquidityAmountSaleAmount(String),
 
     #[error("No LP tokens received")]
     LPTokensNotReceived {},
