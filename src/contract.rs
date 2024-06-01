@@ -994,7 +994,7 @@ pub fn execute(
                 .add_attribute("action", "LaunchFin")
                 .add_messages(messages))
         }
-        ExecuteMsg::UpdateFinAdminOwner { idx } => {
+        ExecuteMsg::UpdateFinAdminOwner { idx, change_owner } => {
             ensure!(
                 info.sender == config.owner || info.sender == config.fin.owner,
                 ContractError::Unauthorized {}
@@ -1017,22 +1017,25 @@ pub fn execute(
                 admin: config.fin.admin.to_string(),
             })];
 
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: launch.fin.unwrap().contract_address.unwrap().to_string(),
-                msg: to_json_binary(&kujira_fin::ExecuteMsg::UpdateConfig {
-                    owner: Some(config.fin.owner.clone()),
-                    price_precision: None,
-                    fee_taker: None,
-                    fee_maker: None,
-                })?,
-                funds: vec![],
-            }));
+            let add_owner_message = change_owner.unwrap_or(true);
+            if add_owner_message {
+                messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: launch.fin.unwrap().contract_address.unwrap().to_string(),
+                    msg: to_json_binary(&kujira_fin::ExecuteMsg::UpdateConfig {
+                        owner: Some(config.fin.owner.clone()),
+                        price_precision: None,
+                        fee_taker: None,
+                        fee_maker: None,
+                    })?,
+                    funds: vec![],
+                }));
+            }
 
             Ok(Response::default()
                 .add_attribute("action", "UpdateFinAdminOwner")
                 .add_messages(messages))
         }
-        ExecuteMsg::UpdateBowAdminOwner { idx } => {
+        ExecuteMsg::UpdateBowAdminOwner { idx, change_owner } => {
             ensure!(
                 info.sender == config.owner || info.sender == config.bow.owner,
                 ContractError::Unauthorized {}
@@ -1056,16 +1059,19 @@ pub fn execute(
                 admin: config.bow.admin.to_string(),
             })];
 
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: launch.bow.unwrap().contract_address.unwrap().to_string(),
-                msg: to_json_binary(&kujira_fin::ExecuteMsg::UpdateConfig {
-                    owner: Some(config.bow.owner.clone()),
-                    price_precision: None,
-                    fee_taker: None,
-                    fee_maker: None,
-                })?,
-                funds: vec![],
-            }));
+            let add_owner_message = change_owner.unwrap_or(true);
+            if add_owner_message {
+                messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: launch.bow.unwrap().contract_address.unwrap().to_string(),
+                    msg: to_json_binary(&kujira_bow::market_maker::ExecuteMsg::UpdateConfig {
+                        owner: Some(config.bow.owner.clone()),
+                        intervals: None,
+                        fee: None,
+                        amp: None,
+                    })?,
+                    funds: vec![],
+                }));
+            }
 
             Ok(Response::default()
                 .add_attribute("action", "UpdateBowAdminOwner")

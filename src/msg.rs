@@ -76,9 +76,11 @@ pub enum ExecuteMsg {
     },
     UpdateFinAdminOwner {
         idx: Uint128,
+        change_owner: Option<bool>,
     },
     UpdateBowAdminOwner {
         idx: Uint128,
+        change_owner: Option<bool>,
     },
     Update {
         launch: crate::launch::Launch,

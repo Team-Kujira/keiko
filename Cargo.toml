@@ -24,6 +24,7 @@ fuzion-utilities = "0.8.3"
 kujira = "1.0.2"
 kujira-std = "1.0.1"
 kujira-fin = "1.0.0"
+kujira-bow = "1.0.0"
 kujira-pilot = "1.0.1"
 schemars = "0.8.16"
 serde = { version = "1.0.196", default-features = false, features = ["derive"] }
