@@ -749,13 +749,13 @@ pub fn execute(
             let price_precision_decimals = if average_price_of_launch.lt(&Decimal::one()) {
                 let num_str = average_price_of_launch.to_string();
                 let parts: Vec<&str> = num_str.split('.').collect();
-                parts[1].chars().take_while(|&c| c == '0').count() + 4
+                parts[1].chars().take_while(|&c| c == '0').count() + 5
             } else if average_price_of_launch.ge(&Decimal::one())
                 && average_price_of_launch.lt(&Decimal::from_str("1000.0")?)
             {
-                3
+                4
             } else {
-                2
+                3
             };
 
             let fin = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
