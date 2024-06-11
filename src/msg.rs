@@ -1,7 +1,7 @@
 use std::fmt;
 
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Coin, Decimal, Decimal256, Uint128};
+use cosmwasm_std::{Addr, Binary, Coin, Decimal, Decimal256, Uint128};
 use fuzion_flows::FlowCreate;
 use kujira::{CallbackMsg, Denom};
 use kujira_pilot::{CreateOrca, CreateSale};
@@ -74,13 +74,13 @@ pub enum ExecuteMsg {
     LaunchFin {
         idx: Uint128,
     },
-    UpdateFinAdminOwner {
-        idx: Uint128,
-        change_owner: Option<bool>,
+    SetContractAdmin {
+        contract: Addr,
+        admin: Addr,
     },
-    UpdateBowAdminOwner {
-        idx: Uint128,
-        change_owner: Option<bool>,
+    ExecuteContract {
+        contract: Addr,
+        msg: Binary,
     },
     Update {
         launch: crate::launch::Launch,
