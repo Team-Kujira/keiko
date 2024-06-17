@@ -14,6 +14,7 @@ use cw_utils::{NativeBalance, PaymentError};
 use fuzion_flows::{FlowCreate, FlowSchedule, FlowType};
 use fuzion_utilities::{Asset, AssetList, DenomUnit, LogoURIs};
 use kujira::{DenomMsg, KujiraMsg, KujiraQuery, Precision};
+use kujira_orca::BidPoolsResponse;
 use kujira_pilot::Status;
 
 use crate::launch::Launch;
@@ -425,6 +426,7 @@ pub fn execute(
                 beneficiary: sale.beneficiary.clone(),
                 sale,
                 orca,
+                bid_pools_snapshot: None,
             };
             pilot.sale.beneficiary = env.contract.address;
 
@@ -546,13 +548,38 @@ pub fn execute(
             );
 
             let execute = CosmosMsg::Wasm(wasm_execute(
-                config.pilot.pilot_contract,
+                config.clone().pilot.pilot_contract,
                 &kujira_pilot::ExecuteMsg::Execute {
                     idx: launch.pilot.clone().unwrap().idx.unwrap(),
                 },
                 vec![],
             )?);
 
+            let mut pilot = launch.clone().pilot.unwrap();
+
+            let sale: kujira_pilot::SaleResponse = deps.querier.query_wasm_smart(
+                config.pilot.pilot_contract.clone(),
+                &kujira_pilot::QueryMsg::Sale {
+                    idx: launch.pilot.clone().unwrap().idx.unwrap(),
+                },
+            )?;
+
+            let bid_pools_result: Result<BidPoolsResponse, StdError> =
+                deps.querier.query_wasm_smart(
+                    sale.orca_address.clone(),
+                    &kujira_orca::QueryMsg::BidPools {
+                        start_after: None,
+                        limit: Some(100),
+                    },
+                );
+
+            pilot.bid_pools_snapshot = if let Ok(bid_pools) = bid_pools_result {
+                Some(bid_pools)
+            } else {
+                None
+            };
+
+            launch.pilot = Some(pilot);
             launch.status = LaunchStatus::Completed;
             launch.save(deps.storage)?;
 
