@@ -187,15 +187,6 @@ pub fn execute(
                         "denom, symbol, decimals, png_url and svg_url are populated when create is false".to_string()
                     )
                 );
-                // let denom_metadata: DenomMetadataResponse = deps
-                //     .querier
-                //     .query(&QueryRequest::<KujiraQuery>::Bank(
-                //         BankQuery::DenomMetadata {
-                //             denom: denom.clone().unwrap().to_string(),
-                //         },
-                //     ))
-                //     .unwrap();
-                // ensure!(denom_metadata.metadata.)
             }
 
             if let Some(denom) = denom.clone() {
