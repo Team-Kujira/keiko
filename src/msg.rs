@@ -4,6 +4,7 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Binary, Coin, Decimal, Decimal256, Uint128};
 use fuzion_flows::FlowCreate;
 use kujira::{CallbackMsg, Denom};
+use kujira_orca::BidPoolsResponse;
 use kujira_pilot::{CreateOrca, CreateSale};
 
 #[cw_serde]
@@ -163,6 +164,7 @@ pub struct Pilot {
     pub beneficiary: Addr,
     pub sale: CreateSale,
     pub orca: CreateOrca,
+    pub bid_pools_snapshot: Option<BidPoolsResponse>,
 }
 
 #[cw_serde]

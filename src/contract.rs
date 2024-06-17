@@ -5,8 +5,8 @@ use std::str::FromStr;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     coin, coins, ensure, from_json, instantiate2_address, to_json_binary, wasm_execute, BankMsg,
-    Binary, CodeInfoResponse, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Order,
-    Reply, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
+    Binary, CodeInfoResponse, Coin, CosmosMsg, Decimal, Decimal256, Deps, DepsMut, Env,
+    MessageInfo, Order, Reply, Response, StdError, StdResult, SubMsg, Uint128, Uint256, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Bound;
@@ -14,6 +14,7 @@ use cw_utils::{NativeBalance, PaymentError};
 use fuzion_flows::{FlowCreate, FlowSchedule, FlowType};
 use fuzion_utilities::{Asset, AssetList, DenomUnit, LogoURIs};
 use kujira::{DenomMsg, KujiraMsg, KujiraQuery, Precision};
+use kujira_orca::BidPoolsResponse;
 use kujira_pilot::Status;
 
 use crate::launch::Launch;
@@ -294,17 +295,18 @@ pub fn execute(
                 ContractError::OneSaleCategoryRecipient {}
             );
 
-            let max_liquidity = Decimal::from_atomics(
+            let max_liquidity = Decimal256::from_atomics(
                 sale_category.clone().next().unwrap().recipients[0].amount,
                 0,
             )
             .unwrap()
-            .mul(Decimal::one() - pilot_config.sale_fee);
+            .mul(Decimal256::one() - Decimal256::from(pilot_config.sale_fee));
 
             ensure!(
-                liquidity_category.clone().next().unwrap().recipients[0]
-                    .amount
-                    .le(&max_liquidity.to_uint_floor()),
+                Uint256::from_uint128(
+                    liquidity_category.clone().next().unwrap().recipients[0].amount,
+                )
+                .le(&max_liquidity.to_uint_floor()),
                 ContractError::LiquidityAmountSaleAmount(max_liquidity.to_string())
             );
 
@@ -415,6 +417,7 @@ pub fn execute(
                 beneficiary: sale.beneficiary.clone(),
                 sale,
                 orca,
+                bid_pools_snapshot: None,
             };
             pilot.sale.beneficiary = env.contract.address;
 
@@ -483,11 +486,26 @@ pub fn execute(
                 launch_balance
             };
 
+            let bid_denom =
+                config.pilot.allowed_bid_denoms.iter().find(|d| {
+                    d.denom == launch.clone().pilot.clone().unwrap().orca.bid_denom.clone()
+                });
+
+            let sale = if launch.clone().token.unwrap().decimals > bid_denom.unwrap().decimals {
+                let mut sale = launch.clone().pilot.clone().unwrap().sale;
+                sale.price /= Decimal::from_str("10").unwrap().pow(
+                    (launch.clone().token.unwrap().decimals - bid_denom.unwrap().decimals) as u32,
+                );
+                sale
+            } else {
+                launch.pilot.clone().unwrap().sale
+            };
+
             messages.push(SubMsg::reply_on_success(
                 CosmosMsg::Wasm(wasm_execute(
                     config.pilot.pilot_contract,
                     &kujira_pilot::ExecuteMsg::Create {
-                        sale: launch.pilot.clone().unwrap().sale,
+                        sale,
                         orca: launch.pilot.clone().unwrap().orca,
                     },
                     vec![pilot_config.deposit, sale_funds],
@@ -521,13 +539,38 @@ pub fn execute(
             );
 
             let execute = CosmosMsg::Wasm(wasm_execute(
-                config.pilot.pilot_contract,
+                config.clone().pilot.pilot_contract,
                 &kujira_pilot::ExecuteMsg::Execute {
                     idx: launch.pilot.clone().unwrap().idx.unwrap(),
                 },
                 vec![],
             )?);
 
+            let mut pilot = launch.clone().pilot.unwrap();
+
+            let sale: kujira_pilot::SaleResponse = deps.querier.query_wasm_smart(
+                config.pilot.pilot_contract.clone(),
+                &kujira_pilot::QueryMsg::Sale {
+                    idx: launch.pilot.clone().unwrap().idx.unwrap(),
+                },
+            )?;
+
+            let bid_pools_result: Result<BidPoolsResponse, StdError> =
+                deps.querier.query_wasm_smart(
+                    sale.orca_address.clone(),
+                    &kujira_orca::QueryMsg::BidPools {
+                        start_after: None,
+                        limit: Some(100),
+                    },
+                );
+
+            pilot.bid_pools_snapshot = if let Ok(bid_pools) = bid_pools_result {
+                Some(bid_pools)
+            } else {
+                None
+            };
+
+            launch.pilot = Some(pilot);
             launch.status = LaunchStatus::Completed;
             launch.save(deps.storage)?;
 
@@ -743,15 +786,24 @@ pub fn execute(
                 .find(|c| c.category_type == CategoryTypes::Sale)
                 .unwrap();
 
-            let average_price_of_launch =
-                Decimal::from_ratio(raise_amount, sale_category.recipients[0].amount);
+            let decimal_delta = launch.clone().token.unwrap().decimals - bid_denom_config.decimals;
+            let average_price_of_launch = if decimal_delta > 0 {
+                Decimal256::from_ratio(
+                    raise_amount
+                        .checked_mul(Uint128::from_str("10").unwrap().pow(decimal_delta as u32))
+                        .unwrap(),
+                    sale_category.recipients[0].amount,
+                )
+            } else {
+                Decimal256::from_ratio(raise_amount, sale_category.recipients[0].amount)
+            };
 
-            let price_precision_decimals = if average_price_of_launch.lt(&Decimal::one()) {
+            let price_precision_decimals = if average_price_of_launch.lt(&Decimal256::one()) {
                 let num_str = average_price_of_launch.to_string();
                 let parts: Vec<&str> = num_str.split('.').collect();
                 parts[1].chars().take_while(|&c| c == '0').count() + 5
-            } else if average_price_of_launch.ge(&Decimal::one())
-                && average_price_of_launch.lt(&Decimal::from_str("1000.0")?)
+            } else if average_price_of_launch.ge(&Decimal256::one())
+                && average_price_of_launch.lt(&Decimal256::from_str("1000.0")?)
             {
                 4
             } else {
@@ -767,9 +819,7 @@ pub fn execute(
                         cw20::Denom::Native(denom.to_string()),
                         cw20::Denom::Native(bid_denom.to_string()),
                     ],
-                    decimal_delta: Some(
-                        (launch.clone().token.unwrap().decimals - bid_denom_config.decimals) as i8,
-                    ),
+                    decimal_delta: Some((decimal_delta) as i8),
                     price_precision: Precision::DecimalPlaces(price_precision_decimals as u8),
                     fee_maker: config.fin.fee_maker,
                     fee_taker: config.fin.fee_taker,
