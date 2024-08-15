@@ -194,6 +194,7 @@ fn launch_new_token() {
                     allowed_bid_denoms: vec![BidDenoms {
                         denom: Denom::from("bid"),
                         symbol: "bid".to_string(),
+                        oracle_symbol: None,
                         decimals: 6,
                     }],
                     min_raise_amount: Uint128::from(100_000_000_000u128),
@@ -749,6 +750,7 @@ fn launch_own_token() {
                     allowed_bid_denoms: vec![BidDenoms {
                         denom: Denom::from("bid"),
                         symbol: "bid".to_string(),
+                        oracle_symbol: None,
                         decimals: 6,
                     }],
                     min_raise_amount: Uint128::from(100_000_000_000u128),
@@ -1249,6 +1251,7 @@ fn launch_own_token_18_decimals() {
                     allowed_bid_denoms: vec![BidDenoms {
                         denom: Denom::from("bid"),
                         symbol: "bid".to_string(),
+                        oracle_symbol: None,
                         decimals: 6,
                     }],
                     min_raise_amount: Uint128::from(100_000_000_000u128),

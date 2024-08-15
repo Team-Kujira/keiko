@@ -13,7 +13,7 @@ use cw_storage_plus::Bound;
 use cw_utils::{NativeBalance, PaymentError};
 use fuzion_flows::{FlowCreate, FlowSchedule, FlowType};
 use fuzion_utilities::{Asset, AssetList, DenomUnit, LogoURIs};
-use kujira::{DenomMsg, KujiraMsg, KujiraQuery, Precision};
+use kujira::{DenomMsg, KujiraMsg, KujiraQuerier, KujiraQuery, Precision};
 use kujira_orca::BidPoolsResponse;
 use kujira_pilot::Status;
 
@@ -389,7 +389,10 @@ pub fn execute(
                 .iter()
                 .find(|d| d.denom == orca.bid_denom.clone());
 
-            ensure!(bid_denom.is_some(), ContractError::InvalidBidDenom {});
+            ensure!(
+                bid_denom.clone().is_some(),
+                ContractError::InvalidBidDenom {}
+            );
 
             let categories = launch.clone().tokenomics.unwrap().categories;
 
@@ -398,11 +401,26 @@ pub fn execute(
                 .find(|c| c.category_type == CategoryTypes::Sale)
                 .unwrap();
 
-            let launch_min_raise_amount = sale_category.recipients[0].amount.mul(sale.price).mul(
-                Decimal::from_str(&orca.max_slot.to_string())
+            let oracle_querier = KujiraQuerier::new(&deps.querier);
+            let oracle_price = oracle_querier.query_exchange_rate(
+                bid_denom
                     .unwrap()
-                    .mul(orca.premium_rate_per_slot),
-            );
+                    .oracle_symbol
+                    .clone()
+                    .unwrap_or(bid_denom.unwrap().symbol.to_string()),
+            )?;
+            let normalized_usd_price = oracle_price.normalize(bid_denom.unwrap().decimals);
+            let launch_min_raise_amount = sale_category.recipients[0]
+                .amount
+                .mul(sale.price)
+                .mul(
+                    Decimal::one().sub(
+                        Decimal::from_str(&orca.max_slot.to_string())
+                            .unwrap()
+                            .mul(orca.premium_rate_per_slot),
+                    ),
+                )
+                .mul(normalized_usd_price);
 
             ensure!(
                 launch_min_raise_amount > config.pilot.min_raise_amount,
