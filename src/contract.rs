@@ -13,20 +13,57 @@ use cw_storage_plus::Bound;
 use cw_utils::{NativeBalance, PaymentError};
 use fuzion_flows::{FlowCreate, FlowSchedule, FlowType};
 use fuzion_utilities::{Asset, AssetList, DenomUnit, LogoURIs};
-use kujira::{DenomMsg, KujiraMsg, KujiraQuery, Precision};
+use kujira::{DenomMsg, KujiraMsg, KujiraQuerier, KujiraQuery, Precision};
 use kujira_orca::BidPoolsResponse;
-use kujira_pilot::Status;
+use kujira_pilot::{CreateOrca, CreateSale, Status};
 
 use crate::launch::Launch;
 use crate::msg::{
-    Bow, CallbackType, CategoryTypes, Config, Fin, LaunchStatus, Pilot, ReplyInfo, ReplyTypes,
-    Token, Tokenomics,
+    BidDenoms, Bow, CallbackType, CategoryTypes, Config, Fin, LaunchStatus, Pilot, ReplyInfo,
+    ReplyTypes, Token, Tokenomics, TokenomicsCategories,
 };
 use crate::state::{launch, CONFIG, REPLY};
 use crate::{ContractError, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
 const CONTRACT_NAME: &str = "fuzion-kujira-keiko";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub fn assert_min_sale_amount(
+    kujira_querier: &KujiraQuerier,
+    config: &Config,
+    bid_denom: &BidDenoms,
+    sale_category: &TokenomicsCategories,
+    sale: &CreateSale,
+    orca: &CreateOrca,
+) -> Result<(), ContractError> {
+    let oracle_price = kujira_querier.query_exchange_rate(
+        bid_denom
+            .oracle_symbol
+            .clone()
+            .unwrap_or(bid_denom.symbol.to_string()),
+    )?;
+    let normalized_usd_price = oracle_price.normalize(bid_denom.decimals);
+    let launch_min_raise_amount = sale_category.recipients[0]
+        .amount
+        .mul(sale.price)
+        .mul(
+            Decimal::one().sub(
+                Decimal::from_str(&orca.max_slot.to_string())
+                    .unwrap()
+                    .mul(orca.premium_rate_per_slot),
+            ),
+        )
+        .mul(normalized_usd_price);
+
+    ensure!(
+        launch_min_raise_amount > config.pilot.min_raise_amount,
+        ContractError::InvalidRaiseAmount(
+            launch_min_raise_amount.to_string(),
+            config.pilot.min_raise_amount.to_string()
+        )
+    );
+    Ok(())
+}
 
 #[entry_point]
 pub fn migrate(deps: DepsMut<KujiraQuery>, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
@@ -389,7 +426,10 @@ pub fn execute(
                 .iter()
                 .find(|d| d.denom == orca.bid_denom.clone());
 
-            ensure!(bid_denom.is_some(), ContractError::InvalidBidDenom {});
+            ensure!(
+                bid_denom.clone().is_some(),
+                ContractError::InvalidBidDenom {}
+            );
 
             let categories = launch.clone().tokenomics.unwrap().categories;
 
@@ -398,19 +438,14 @@ pub fn execute(
                 .find(|c| c.category_type == CategoryTypes::Sale)
                 .unwrap();
 
-            let launch_min_raise_amount = sale_category.recipients[0].amount.mul(sale.price).mul(
-                Decimal::from_str(&orca.max_slot.to_string())
-                    .unwrap()
-                    .mul(orca.premium_rate_per_slot),
-            );
-
-            ensure!(
-                launch_min_raise_amount > config.pilot.min_raise_amount,
-                ContractError::InvalidRaiseAmount(
-                    launch_min_raise_amount.to_string(),
-                    config.pilot.min_raise_amount.to_string()
-                )
-            );
+            assert_min_sale_amount(
+                &KujiraQuerier::new(&deps.querier),
+                &config,
+                bid_denom.unwrap(),
+                sale_category,
+                &sale,
+                &orca,
+            )?;
 
             let mut pilot = Pilot {
                 idx: None,
@@ -501,13 +536,21 @@ pub fn execute(
                 launch.pilot.clone().unwrap().sale
             };
 
+            let orca = launch.pilot.clone().unwrap().orca;
+
+            assert_min_sale_amount(
+                &KujiraQuerier::new(&deps.querier),
+                &config,
+                bid_denom.unwrap(),
+                sale_category,
+                &sale,
+                &orca,
+            )?;
+
             messages.push(SubMsg::reply_on_success(
                 CosmosMsg::Wasm(wasm_execute(
                     config.pilot.pilot_contract,
-                    &kujira_pilot::ExecuteMsg::Create {
-                        sale,
-                        orca: launch.pilot.clone().unwrap().orca,
-                    },
+                    &kujira_pilot::ExecuteMsg::Create { sale, orca },
                     vec![pilot_config.deposit, sale_funds],
                 )?),
                 ReplyTypes::Create as u64,

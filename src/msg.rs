@@ -214,6 +214,7 @@ impl fmt::Display for LaunchStatus {
 pub struct BidDenoms {
     pub denom: Denom,
     pub symbol: String,
+    pub oracle_symbol: Option<String>,
     pub decimals: u8,
 }
 
